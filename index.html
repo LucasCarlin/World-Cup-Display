@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Next Matches</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #fafafa;
+    font-family: -apple-system, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    color: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .wrapper {
+    width: 100%;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .game {
+    width: 100%;
+    text-align: center;
+    padding: 4vh 0;
+  }
+  .matchup {
+    font-size: 4.4vw;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+  .matchup .flag-emoji {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    margin: 0 0.15em;
+  }
+  .matchup .vs {
+    color: #999;
+    font-weight: 400;
+    font-size: 0.5em;
+    margin: 0 0.3em;
+  }
+  .datetime {
+    font-size: 2.4vw;
+    font-weight: 500;
+    margin-top: 1.2vh;
+  }
+  .venue {
+    font-size: 1.7vw;
+    color: #666;
+    margin-top: 0.4vh;
+  }
+  .separator {
+    width: 70%;
+    height: 1px;
+    background: #ddd;
+  }
+  .status {
+    font-size: 2.4vw;
+    color: #999;
+    text-align: center;
+  }
+  .updated {
+    position: fixed;
+    bottom: 10px;
+    right: 16px;
+    font-size: 0.8vw;
+    color: #ccc;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper" id="wrapper">
+  <div class="status">Loading…</div>
+</div>
+<div class="updated" id="updated"></div>
+
+<script>
+const WORKER_URL = "https://wc-display.lcbuea5.workers.dev";
+const REFRESH_MS = 60 * 60 * 1000; // 1 hour
+
+const FLAGS = {
+  "Germany": "🇩🇪",
+  "England": "🇬🇧",
+  "Ivory Coast": "🇨🇮",
+  "Côte d'Ivoire": "🇨🇮",
+  "Croatia": "🇭🇷",
+  "France": "🇫🇷",
+  "Spain": "🇪🇸",
+  "Portugal": "🇵🇹",
+  "Brazil": "🇧🇷",
+  "Argentina": "🇦🇷",
+  "Netherlands": "🇳🇱",
+  "Belgium": "🇧🇪",
+  "Italy": "🇮🇹",
+  "United States": "🇺🇸",
+  "USA": "🇺🇸",
+  "Mexico": "🇲🇽",
+  "Canada": "🇨🇦",
+  "Japan": "🇯🇵",
+  "South Korea": "🇰🇷",
+  "Morocco": "🇲🇦",
+  "Senegal": "🇸🇳",
+  "Switzerland": "🇨🇭",
+  "Poland": "🇵🇱",
+  "Denmark": "🇩🇰",
+  "Sweden": "🇸🇪",
+  "Norway": "🇳🇴",
+  "Austria": "🇦🇹",
+  "Serbia": "🇷🇸",
+  "Wales": "🏳️",
+  "Scotland": "🏳️",
+  "Ireland": "🇮🇪",
+  "Ghana": "🇬🇭",
+  "Nigeria": "🇳🇬",
+  "Cameroon": "🇨🇲",
+  "Tunisia": "🇹🇳",
+  "Egypt": "🇪🇬",
+  "Australia": "🇦🇺",
+  "Saudi Arabia": "🇸🇦",
+  "Qatar": "🇶🇦",
+  "Iran": "🇮🇷",
+  "Ecuador": "🇪🇨",
+  "Uruguay": "🇺🇾",
+  "Colombia": "🇨🇴",
+  "Chile": "🇨🇱",
+  "Peru": "🇵🇪",
+  "Costa Rica": "🇨🇷",
+  "Panama": "🇵🇦",
+  "Jamaica": "🇯🇲",
+  "New Zealand": "🇳🇿",
+  "Turkey": "🇹🇷",
+  "Ukraine": "🇺🇦",
+  "Czech Republic": "🇨🇿",
+  "Slovakia": "🇸🇰",
+  "Greece": "🇬🇷",
+  "Hungary": "🇭🇺",
+  "Finland": "🇫🇮",
+  "Iceland": "🇮🇸",
+  "Algeria": "🇩🇿",
+  "South Africa": "🇿🇦",
+  "Curaçao": "🇨🇼",
+  "Haiti": "🇭🇹",
+  "Jordan": "🇯🇴",
+  "Uzbekistan": "🇺🇿",
+  "Cape Verde": "🇨🇻",
+  "New Caledonia": "🇳🇨"
+};
+
+function flagFor(name) {
+  return FLAGS[name] || "🏳️";
+}
+
+function formatDateTime(utcDate) {
+  const d = new Date(utcDate);
+  const dateStr = d.toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long"
+  });
+  const timeStr = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit"
+  });
+  return `${dateStr} · ${timeStr}`;
+}
+
+function gameHTML(team, match) {
+  if (!match) {
+    return `<div class="game"><div class="status">No upcoming match for ${team}</div></div>`;
+  }
+  const home = match.isHome ? team : match.opponent;
+  const away = match.isHome ? match.opponent : team;
+  return `
+    <div class="game">
+      <div class="matchup">
+        <span class="flag-emoji">${flagFor(home)}</span>${home}<span class="vs">vs</span><span class="flag-emoji">${flagFor(away)}</span>${away}
+      </div>
+      <div class="datetime">${formatDateTime(match.utcDate)}</div>
+      ${match.venue ? `<div class="venue">${match.venue}</div>` : ""}
+    </div>
+  `;
+}
+
+async function loadNextMatches() {
+  const wrapper = document.getElementById("wrapper");
+  try {
+    const res = await fetch(WORKER_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const results = data.results || [];
+    if (results.length === 0) {
+      wrapper.innerHTML = `<div class="status">No data available</div>`;
+      return;
+    }
+
+    const blocks = results.map(r => gameHTML(r.team, r.match || null));
+    wrapper.innerHTML = blocks.join(`<div class="separator"></div>`);
+  } catch (e) {
+    wrapper.innerHTML =
+      `<div class="status">Error loading match data<br>${e.message}</div>`;
+    console.error(e);
+  } finally {
+    document.getElementById("updated").textContent =
+      "Updated " + new Date().toLocaleTimeString("en-GB");
+  }
+}
+
+loadNextMatches();
+setInterval(loadNextMatches, REFRESH_MS);
+</script>
+
+</body>
+</html>
